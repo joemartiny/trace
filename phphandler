@@ -1,0 +1,724 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use GuzzleHttp\Client;
+use DB;
+use Illuminate\Http\Request;
+
+
+
+
+class accountHandler extends Controller
+{
+    //
+
+
+	public function personalPage(Request $req)
+	{
+		# code...
+
+		return view('account.personal')->with(array('adVal'=>"",'strVal'=>"State",'ctVal'=>"City",'psCVal'=>"",'dobVal'=>"",'states'=>$this->states(),'cities'=>$this->cities()));
+
+	}
+
+
+	public function personalPageP(Request $request)
+	{
+		# code...
+
+		$address=$this->filter($request->input("address"));
+		$state=$this->filter($request->input("sta_te"));
+		$city=$this->filter($request->input("city"));
+		$postalCode=$this->filter($request->input("psCode"));
+		$dob=$this->filter($request->input("dob"));
+
+
+
+		if ($this->validators("address",$address)!=true) {
+			# code...
+			return view('account.personal')->with(array('adErr'=>"Use format [number, street, busstop]",'adVal'=>$address,'psCVal'=>$postalCode,'dobVal'=>$dob,'strVal'=>$state,'ctVal'=>$city,'states'=>$this->states(),'cities'=>$this->cities()));
+
+		}
+
+		elseif ($this->validators("state",$state)!=true) {
+			# code...
+			return view('account.personal')->with(array('stErr'=>"State selected doesn't exist",'adVal'=>$address,'psCVal'=>$postalCode,'dobVal'=>$dob,'strVal'=>$state,'ctVal'=>$city,'states'=>$this->states(),'cities'=>$this->cities()));
+
+		}
+
+		elseif ($this->validators("city",$city)!=true) {
+			# code...
+			return view('account.personal')->with(array('ctErr'=>"City selected doesn't exist",'adVal'=>$address,'psCVal'=>$postalCode,'dobVal'=>$dob,'strVal'=>$state,'ctVal'=>$city,'states'=>$this->states(),'cities'=>$this->cities()));
+
+		}
+
+		elseif ($this->validators("postal",$postalCode)!=true && empty($postalCode)) {
+			# code...
+			return view('account.personal')->with(array('psCErr'=>"Invalid Postal Number",'adVal'=>$address,'psCVal'=>$postalCode,'dobVal'=>$dob,'strVal'=>$state,'ctVal'=>$city,'states'=>$this->states(),'cities'=>$this->cities()));
+
+		}
+
+		elseif ($this->validators("date",$dob)!=true) {
+
+			# code...
+			return view('account.personal')->with(array('dobErr'=>"Use format [day month year] or [day-month-year]",'adVal'=>$address,'psCVal'=>$postalCode,'dobVal'=>$dob,'strVal'=>$state,'ctVal'=>$city,'states'=>$this->states(),'cities'=>$this->cities()));
+
+
+		}
+
+
+		else{
+
+				try {
+					$client = new Client();
+					    $res = $client->request('POST', 'http://127.0.0.1:5000/complete/signup', [
+					        'form_params' => [
+					        	'address' => $address,
+						        'city' => $city,
+					            'state' => $state,
+					            'postalCode' => $postalCode,
+					            'dob' => $dob,
+					        ]
+					    ]);
+
+					$result= $res->getBody()->getContents();
+					 // do($result);
+					if ($result=="true") {
+
+						$request->session()->put('accountConfirmed', true);
+						return "Personal Data was sucessfully inputed into the system";
+
+					}
+					else{
+
+							return view("account.personal")->with(array('frmErr'=>"Sorry an error occured, try submit again",'adVal'=>$address,'psCVal'=>$postalCode,'dobVal'=>$dob,'strVal'=>$state,'ctVal'=>$city,'states'=>$this->states(),'cities'=>$this->cities()));
+
+					}
+				} catch (Exception $e) 
+				{
+
+					return view("account.signup")->with(array('frmErr'=>"Sorry an error occured, try submit again",'adVal'=>$address,'psCVal'=>$postalCode,'dobVal'=>$dob,'strVal'=>$state,'ctVal'=>$city,'states'=>$this->states(),'cities'=>$this->cities()));
+									
+				}
+
+
+
+		}
+
+
+
+	}
+
+
+
+
+	public function forgotAccount(Request $request)
+	{
+		# code..
+		$email=$this->filter($request->input("emL"));
+
+		if($this->validators("email",$email)==true && !empty(DB::select('select * from user WHERE email=?',[$email]))){
+			
+			#execute query to python so as to revalidate the email n send mail for password recovery
+
+		}
+
+		else{
+
+			return view("account.forgot")->with(array('emErr'=>"Email Address does not exist",'emVal'=>$emai));
+
+		}
+
+
+	}
+
+
+ 	public function createAccount(Request $request)
+ 	{
+ 		# code for creating account...
+
+ 		$usr=$this->filter($request->input("userNm"));
+ 		$email=$this->filter($request->input("email"));
+ 		$fulName=$this->filter($request->input("fulname"));
+ 		$phnNum=$this->filter($request->input("phn"));
+ 		$password=$this->filter($request->input("pwd"));
+ 		$cPasswrd=$this->filter($request->input("cPhn"));
+ 		$csrf_for_Flask=$request->input("csrf_token");# get csrf_token from page for flask server
+
+
+ 		$checkUsername= DB::select('select * from user WHERE username=?',[$usr]);
+ 		$checkMail= DB::select('select * from user WHERE email=?',[$email]);
+ 		$checkNumber= DB::select('select * from user WHERE phone_number=?',[$phnNum]);
+
+ 		#run validations for the form data
+
+
+ 		if ($this->validators("user",$usr)==true && $this->validators("email",$email)==true && $this->validators("name",$fulName)==true && $this->validators("number",$phnNum)==true && $this->validators("pwd",$password)==true && $cPasswrd==$password && empty($checkUsername) && empty($checkMail) && empty($checkNumber)) 
+ 		{
+ 			#this code gets executed when all coast is clear, n all validations re made with no form errors...
+ 			#now submit this to python server
+
+				try {
+					$client = new Client();
+					    $res = $client->request('POST', 'http://127.0.0.1:5000/signup', [
+					        'form_params' => [
+					        	'name' => $fulName,
+						        'email' => $email,
+					            'usr' => $usr,
+					            'pwd' => $password,
+					            'phn' => $phnNum,
+					            'csrf_token'=>$csrf_for_Flask,
+					        ]
+					    ]);
+
+					$result= $res->getBody()->getContents();
+					 // do($result);
+					if ($result=="true") {
+
+						$request->session()->put('accountConfirmed', true);
+
+					}
+					else{
+
+							return view("account.signup")->with(array('frmErr'=>"Sorry an error occured, try submit again",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+
+					}
+				} catch (Exception $e) 
+				{
+
+					return view("account.signup")->with(array('frmErr'=>"Sorry an error occured, try submit again",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+									
+				}
+
+
+ 			# code...
+ 		}
+
+
+ 		elseif($this->validators("name",$fulName)!=true) {
+
+ 			return view("account.signup")->with(array('nmErr'=>"Name Example: John Doe",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+
+ 		}
+
+ 		elseif($this->validators("user",$usr)!=true) {
+
+ 			return view("account.signup")->with(array('usrErr'=>"You would use this to login",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+
+ 		}
+
+ 		elseif($this->validators("email",$email)!=true) {
+
+ 			return view("account.signup")->with(array('emErr'=>"Invalid Email Address",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+
+ 		}
+
+
+ 		elseif($this->validators("number",$phnNum)!=true) {
+
+ 			return view("account.signup")->with(array('numErr'=>"Invalid Number format",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+
+ 		}
+
+ 		elseif($this->validators("pwd",$password)!=true) {
+
+ 			return view("account.signup")->with(array('psErr'=>"Format accepted are either (numbers/symbols/caps) with lowercase letters",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+
+ 		}
+
+
+ 		elseif($cPasswrd!=$password) {
+
+ 			return view("account.signup")->with(array('cPErr'=>"Password does not match",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+
+ 		}
+
+ 		elseif(!empty($checkUsername)) {
+
+ 			return view("account.signup")->with(array('usrErr'=>"Username is already in use",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+
+ 		}
+
+ 		elseif(!empty($checkMail)) {
+
+ 			return view("account.signup")->with(array('emErr'=>"Email is already in use",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+
+ 		}
+
+ 		elseif (!empty($checkNumber)) {
+
+ 			return view("account.signup")->with(array('numErr'=>"Phone number is already in use",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+
+ 		}
+
+
+ 		#end of validations for signup
+
+
+
+ 	}
+
+
+    public function validateUser(Request $request){
+
+
+		// return DB::select('select * from user WHERE username="mama"');
+    	$user=$request->input("usr");
+
+    	if($this->validators("user",$user)==true){
+    		$user=$this->filter($user);	
+    		$res= DB::select('select * from user WHERE username=?',[$user]);
+    		if(empty($res)){
+    			return "False";
+    		}
+    		else{
+    			return "True";
+    		}
+
+    	}
+
+    	else{
+    		return "False";
+    	}
+    	
+    
+    }
+
+
+    public function validateNumber(Request $request)
+    {
+    	# code...
+    	$num=$request->input("nM");
+    	if($this->validators("number",$num)==true){
+    		$num=$this->filter($num);	
+    		return $num;
+    		$res= DB::select('select * from user WHERE phone_number=?',[$num]);
+    		if(empty($res)){
+
+    			return "False";
+
+    		}
+    		else{
+
+    			return "True";
+
+    		}
+
+    	}
+    	else{
+    		return "False";
+    	}
+
+    }
+
+    public function validateEmail(Request $request){
+
+
+    	$email=$request->input("email");
+    	// filter_var(variable)
+    	//filter_var($email,FILTER_VALIDATE_EMAIL)
+    	if($this->validators("email",$email)==true){
+    		$email=$this->filter($email);	
+    		$res= DB::select('select * from user WHERE email=?',[$email]);
+    		if(empty($res)){
+    			return "False";
+    		}
+    		else{
+    			return "True";
+    		}
+
+    	}
+
+    	else{
+    		return "False";
+    	}
+    	
+    	
+    	
+
+    }
+
+
+	public function loginHandler(Request $request){
+
+		#extract values from form
+
+		$usr=$request->input("userNm");
+		$password=$request->input("passKey");
+		$csrf_for_Flask=$request->input("csrf_token");# get csrf_token from page for flask server
+
+
+		#filter form values
+		$usr=$this->filter($usr);
+		$password=$this->filter($password);
+
+
+		#run validators and confirm if all is fine
+		if($this->validators("user",$usr)==true && $this->validators("pwd",$password)==true && strlen($password)>6){#if validators worked fine then do this
+
+
+
+				
+				
+				try {
+					$client = new Client();
+					    $res = $client->request('POST', 'http://127.0.0.1:5000/login', [
+					        'form_params' => [
+					            'usr' => $usr,
+					            'pwd' => $password,
+					            'csrf_token'=>$csrf_for_Flask,
+					        ]
+					    ]);
+
+					$result= $res->getBody()->getContents();
+					 // do($result);
+					if ($result=="true") {
+						# code...
+						$request->session()->put('loggedIn', true);
+						$request->session()->put('loggedUsr', $usr);
+						print "logged in sucessfully<br/>";
+						print $request->session()->get('loggedUsr');
+					}
+
+					elseif ($result=="unconfirmed") {
+						#if email is not yet confirmed
+						
+						return view("account.login")->with(array('usrErr'=>"Confirm your mail to login",'usrVal'=>$usr));
+
+					}
+
+					else{
+						return view("account.login")->with(array('pwdErr'=>"Incorrect username or password",'usrVal'=>$usr));
+					}
+					// return view("account.login")->with(array('pwdErr'=>"Incorrect username or password",'usrVal'=>$usr));			
+				} catch (Exception $e) {
+
+					print $e;
+					
+				}
+
+
+
+		}
+
+		else{
+			
+			if($this->validators("user",$usr)==false){
+				return view("account.login")->with(array('usrErr'=>"Sorry username is incorrect",'usrVal'=>$usr));
+			}
+
+			else if($this->validators("pwd",$password)==false){
+				return view("account.login")->with(array('pwdErr'=>"Sorry password is incorrect",'usrVal'=>$usr));
+			}
+
+		}
+
+
+	}
+
+	protected function filter($value)
+	{
+		# code...
+		$value=strip_tags($value);
+		$value=trim($value);
+		$value=stripslashes($value);
+		$value=htmlspecialchars($value);
+		return $value;
+	}
+
+	protected function validators($type,$value)
+	{
+		# code...
+		#validationall codes goes here
+		# so we validate based on the type passed, take a look at each if n nested if's n else thats d logic
+
+		if ($type=='user') {
+			# username validation...
+			if (preg_match("/^(\S+)([A-z]+)([0-9]*)([-_]*)$/", $value)) {
+				# code...
+				return true;
+			}
+
+			else{
+				return false;
+			}
+		}
+
+
+		elseif ($type=='name') {
+			# username validation...
+			if (preg_match("/^([A-z]+) ([A-z]+)$/", $value)) {
+				# code...
+				return true;
+			}
+
+			else{
+				return false;
+			}
+		}
+
+
+		#now lets validtion for password, it's longer because of d fact that d form accepts and alphabet with either a number, upper case, or sign
+		elseif ($type=='pwd') {
+			# code...
+			if (preg_match("/([a-z]+)([0-9]+)/", $value)) {
+				return true;
+			}
+
+			elseif (preg_match("/([a-z]+)([A-Z]+)/", $value)) {
+				return true;
+			}
+
+			elseif (preg_match("/([A-z]+)([\\._-]+)/", $value)) {
+				return true;
+			}
+
+			else{
+				return false;
+			}
+
+		}
+
+
+		elseif ($type=="email") {
+			# code...
+			if(filter_var($value,FILTER_VALIDATE_EMAIL)){
+				return true;
+			}
+
+			else{
+				return false;
+			}
+		}
+
+
+		elseif ($type=="address") {
+			# code...
+			if(preg_match('/^([0-9]+),([a-zA-Z ]+),[a-zA-Z ]+$/', $value)){
+				return true;
+			}
+
+			else{
+				return false;
+			}
+		}
+
+
+		elseif ($type=="date") {
+			
+			# code...
+			if(preg_match("~^\d{2}-\d{2}-\d{4}$~", $value)){
+
+				return true;
+
+			}
+
+			elseif(preg_match("~^\d{2} \d{2} \d{4}$~", $value)){
+
+				return true;
+
+			}
+
+			else{
+
+				return false;
+
+			}
+		}
+
+
+		elseif ($type=="postal") {
+
+			# code...
+			if(preg_match("~^\d{6}$~", $value)){
+
+				return true;
+
+			}
+
+			else{
+
+				return false;
+
+			}
+		}
+
+		elseif ($type=="state") {
+
+			# code...
+				foreach ($this->states() as $state) {
+
+					# code...
+					if ($state==$value) {
+						# code...
+						return true;
+					}
+
+
+				}
+				return false;
+
+
+		}
+
+
+		elseif ($type=="city") {
+
+			# code...
+				foreach ($this->cities() as $city) {
+
+					# code...
+					if ($city==$value) {
+						# code...
+						return true;
+
+					}
+
+
+				}
+				return false;
+
+
+		}
+
+
+		elseif ($type=="number") {
+			# code...
+			if(preg_match("/(\+\d{3})(\d{7,15})/", $value) && strlen($value)>=7 && strlen($value)<=15){
+
+				return true;
+
+			}
+
+			else{
+				return false;
+			}
+		}
+
+
+	}
+
+public function states()
+{
+		# code...
+
+	return array(
+	'ABIA',
+	'ADAMAWA',
+	'AKWA IBOM',
+	'ANAMBRA',
+	'BAUCHI',
+	'BAYELSA',
+	'BENUE',
+	'BORNO',
+	'CROSS RIVER',
+	'DELTA',
+	'EBONYI',
+	'EDO',
+	'EKITI',
+	'ENUGU',
+	'GOMBE',
+	'IMO',
+	'JIGAWA',
+	'KADUNA',
+	'KANO',
+	'KATSINA',
+	'KEBBI',
+	'KOGI',
+	'KWARA',
+	'LAGOS',
+	'NASSARAWA',
+	'NIGER',
+	'OGUN',
+	'ONDO',
+	'OSUN',
+	'OYO',
+	'PLATEAU',
+	'RIVERS',
+	'SOKOTO',
+	'TARABA',
+	'YOBE',
+	'ZAMFARA');
+
+	}
+
+public function cities()
+{
+		# code...
+
+	return array(
+	'Aba',
+	'Abakaliki',
+	'Abeokuta',
+	'Abuja',
+	'Ado Ekiti',
+	'Akpawfu',
+	'Akure',
+	'Asaba',
+	'Awka',
+	'Bauchi',
+	'Benin City',
+	'Birnin Kebbi',
+	'Buguma[1]',
+	'Calabar',
+	'Dutse',
+	'Eket',
+	'Enugu',
+	'Gombe',
+	'Gusau',
+	'Ibadan',
+	'Ifelodun',
+	'Ife',
+	'Ikeja',
+	'Ikirun',
+	'Ikot-Abasi',
+	'Ikot Ekpene',
+	'Ilorin',
+	'Iragbiji',
+	'Jalingo',
+	'Jimeta',
+	'Jos',
+	'Kaduna',
+	'Kano',
+	'Katsina',
+	'Karu',
+	'Kumariya',
+	'Lafia',
+	'Lagos',
+	'Lekki',
+	'Lokoja',
+	'Maiduguri',
+	'Makurdi',
+	'Minna',
+	'Nnewi',
+	'Nsukka',
+	'Offa',
+	'Ogbomoso',
+	'Onitsha',
+	'Okene',
+	'Ogaminana',
+	'Omu-Aran',
+	'Oron',
+	'Oshogbo',
+	'Owerri',
+	'Owo',
+	'Orlu',
+	'Oyo',
+	'Port Harcourt',
+	'Potiskum',
+	'Sokoto',
+	'Suleja',
+	'Umuahia',
+	'Uyo',
+	'Warri',
+	'Wukari',
+	'Yenagoa',
+	'Yola',
+	'Zaria');
+
+	}
+
+
+
+}
