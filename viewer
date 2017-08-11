@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import request
-from app import app,csrf
-from flask import render_template, request, redirect, url_for, flash, abort, g, jsonify, make_response
+from app import app,csrf,login_manager
+from flask import render_template, request, redirect, url_for, flash, abort, g, jsonify, make_response, session
 from .forms import RegistrationForm, LoginForm, EmailForm, PasswordForm, CompleteForm
 from .models import User, PrivateDetails
 from app import db
@@ -33,13 +33,19 @@ def gen_tk():
         return e
 
 
+@login_manager.user_loader
+def user_loader(user_id):
+    """ This sets the callback for reloading a user from the session. The
+        function you set should take a user ID (a ``unicode``) and return a
+        user object, or ``None`` if the user does not exist."""
+    return User.query.get(int(user_id))
+
 def complete_registration(f):
     """This decorator is used to ensure that the second sign up form was filled up"""
     @wraps(f)
     def wrap(*args, **kwargs):
-
         if current_user.account_confirmed is False:
-            return redirect(url_for('complete_signup'))
+            print "hy"
         else:
             return f(*args, **kwargs)
 
@@ -62,11 +68,12 @@ def before_request():
         
                          
 @app.route('/')
-@login_required
-@complete_registration
+# @login_required
+# @complete_registration
 def index():
     return jsonify({
         'code': 200,
+        'res':session['uId'],
         'status': 'okay'
     })
 
@@ -98,24 +105,33 @@ def signup():
 
         return "true"
 
-@app.route('/complete/signup', methods=['GET', 'POST'])
+@app.route('/complete/signup', methods=['POST'])
 @csrf.exempt
 def complete_signup():
+        try:
+            # print current_user.account_confirmed
 
+            user = User.query.filter_by(username=request.form['usr'])
+            # print user.session.query.filter_by(user.id)
+            g.user = PrivateDetails(address=request.form['address'], city=request.form['city'], state=request.form['state'],postal_code=request.form['postalCode'],date_of_birth=request.form['dob'],user_id=str(User.query.get(1)).split(" ")[1])
 
-    try:
-        g.user = PrivateDetails(address=request.form['address'], city=request.form['city'], state=request.form['state'],postal_code=request.form['postalCode'],date_of_birth=request.form['dob'],user_id=1)
+            user.update(dict(account_confirmed=True))
+            db.session.commit()
 
-        current_user.account_confirmed = True
+            db.session.add(g.user)
+            db.session.commit()
 
-        db.session.add(g.user)
-        db.session.commit()
+            print "true"
+            return "True"
 
-        return "True"
-
-    except Exception,e:
-        print e
-        return "False"
+        except Exception,e:
+            print e
+            print"false"
+            return "False"
+    # else:
+    #     print "not exisitng"
+    #     print "hy"
+    #     return "False"
 
 
 
@@ -157,29 +173,29 @@ def confirm_email(token):
 
 
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/login', methods=['GET','POST'])
 @csrf.exempt
 def login():
                          
-                         
-    if current_user.is_authenticated and current_user.email_confirmed:
-        return jsonify({
-            'msg': 'user already logged in',
-            'url': '/index'
-        })
-                             
-    else:
 
             user = User.query.filter_by(username=request.form['usr']).first()
 
             if user is not None and user.verify_password(request.form['pwd']):
 
-                if user.email_confirmed:
+                if user.email_confirmed and user.account_confirmed:
 
-                    login_user(user, True)
+                    print "\n\n"+request.form['remember']+"\n\n"
+                    login_user(user,remember=True)
+                    
+
 
                     return "true"
                     #  return redirect(request.args.get('next') or url_for('index'))
+                elif  user.email_confirmed and not user.account_confirmed:
+
+                    login_user(user,remember=True)
+                    return "accountUnconfirmed"
+
                 return "unconfirmed"
                 #  flash('Mail not configured')
             else:
