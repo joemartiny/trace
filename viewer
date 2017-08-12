@@ -6,7 +6,7 @@ from .forms import RegistrationForm, LoginForm, EmailForm, PasswordForm, Complet
 from .models import User, PrivateDetails
 from app import db
 from flask_login import login_required, current_user, login_user,  logout_user
-from .security import generate_confirmation_token, confirm_token
+from .security import generate_confirmation_token, confirm_token,generate_recovery_token,confirm_recovery_token
 from .email import send_email
 from sqlalchemy.exc import IntegrityError
 from functools import wraps
@@ -84,26 +84,34 @@ def index():
 @app.route('/signup', methods=['GET','POST'])
 @csrf.exempt
 def signup():
-        user = User(full_name=request.form['name'], email=request.form['email'], username=request.form['usr'], password=request.form['pwd'],phone_number=request.form['phn'])
+        
         try:
+            user = User(full_name=request.form['name'], email=request.form['email'], username=request.form['usr'], password=request.form['pwd'],phone_number=request.form['phn'])
             db.session.add(user)
             db.session.commit()
+            token = generate_confirmation_token(user.email)
+
+            confirm_url = url_for('confirm_email', token=token, _external=True)
+
+            html = render_template('activate.html', confirm_url='http://127.0.0.1:8000/account/confirMail/'+token)
+
+            subject = 'Trace: Confirm Your Account'
+
+            send_email(request.form['email'], subject, html)
+
+            return "true"
 
         except IntegrityError:
             db.session.rollback()
             return "false"
+        except Exception,e:
+            db.session.delete(user)
+            db.session.commit()
+            print "Error Occured: \n"+str(e)
+            return "false"
 
-        token = generate_confirmation_token(user.email)
 
-        confirm_url = url_for('confirm_email', token=token, _external=True)
 
-        html = render_template('activate.html', confirm_url=confirm_url)
-
-        subject = 'Please confirm your Email'
-
-        send_email(user.email, subject, html)
-
-        return "true"
 
 @app.route('/complete/signup', methods=['POST'])
 @csrf.exempt
@@ -135,7 +143,7 @@ def complete_signup():
 
 
 
-@app.route('/confirm/<token>')
+@app.route('/confirm/<token>', methods=['GET'])
 def confirm_email(token):
     """
      the try ... except bit at the beginning to check that the token is valid.
@@ -146,34 +154,30 @@ def confirm_email(token):
     """
     try:
         email = confirm_token(token)
+        user = User.query.filter_by(email=email).first()
+        if user.email_confirmed:
+            return "already"
+        # flash('Email has already been confirmed Please login')
+        else:
+            user.email_confirmed = True
+            db.session.add(user)
+            db.session.commit()
+            return user.username
+        #  return redirect(url_for('login'))
+    except IntegrityError:
+        db.session.rollback()
+        return "expired"
     except Exception as e:
-        return jsonify({
-            'msg': 'The confirmation link is invalid or has expired, danger',
-            'status': False,
-            'code': 404
-        })
+        return "expired"
         # flash('The confirmation link is invalid or has expired.', 'danger')
         #  abort(404)
 
-    user = User.query.filter_by(email=email).first()
-    if user.email_confirmed:
-        return jsonify(message='Email has already benn confirmed please login')
-    # flash('Email has already been confirmed Please login')
-    else:
-        user.email_confirmed = True
-        db.session.add(user)
-        db.session.commit()
-        return jsonify({
-            'status': True,
-            'msg': 'Your email has been confirmed',
-            'url': '/login'
-        })
-    #  return redirect(url_for('login'))
+ 
 
 
 
 
-@app.route('/login', methods=['GET','POST'])
+@app.route('/login', methods=['POST'])
 @csrf.exempt
 def login():
                          
@@ -184,7 +188,7 @@ def login():
 
                 if user.email_confirmed and user.account_confirmed:
 
-                    print "\n\n"+request.form['remember']+"\n\n"
+                    # print "\n\n"+request.form['remember']+"\n\n"
                     login_user(user,remember=True)
                     
 
@@ -204,16 +208,18 @@ def login():
         # return render_template('login.html', form=form)
 
 
-@app.route('/reset/password', methods=['GET', 'POST'])
+@app.route('/reset/password', methods=['GET','POST'])
+@csrf.exempt
 def reset():
-    form = EmailForm()
 
-    if form.validate_on_submit():
-        user = User.query.filter_by(email=form.email.data).first()
+    try:
+        email=request.form['email']
+        # return email
+        user = User.query.filter_by(email=request.form['email']).first()
 
         if user and user.email_confirmed:
 
-            subject = 'Password reset requested'
+            subject = 'Trace: Password reset requested'
 
             token = generate_recovery_token(user.email)
 
@@ -223,24 +229,34 @@ def reset():
 
             send_email(user.email, subject, html)
 
-            flash('A confirmation link to reset your password has been sent to you')
+            # flash('A confirmation link to reset your password has been sent to you')
 
-            return redirect(url_for('login'))
+            return 'sent'
 
         else:
-            flash('This Email hasnt been confirmed yet')
+            # return 'This Email hasnt been confirmed yet'
+            return "ntConfirmed"
 
-    return render_template('reset.html', form=form)
+    except Exception,e:
+        print e
+        return "false"
+
+    except IntegrityError,ie:
+        print ie
+        return "false"
 
 
-@app.route('/reset/<token>', methods=['GET', 'POST'])
+@app.route('/reset/<token>', methods=['GET','POST'])
+@csrf.exempt
 def reset_password_with_token(token):
     try:
+
         email = confirm_recovery_token(token)
 
     except:
         flash('The confirmation link is invalid or has expired.', 'danger')
-        abort(400)
+        # abort(400)
+        return "hy"
 
     form = PasswordForm()
 
