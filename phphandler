@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use GuzzleHttp\Client;
 use DB;
+use Mail;
+use App\UserBase;
 use Illuminate\Http\Request;
 
 
@@ -12,6 +14,201 @@ use Illuminate\Http\Request;
 class accountHandler extends Controller
 {
     //
+
+
+	// public function test(Request $req)
+	// {
+	// 	# code...
+	// 	$user = UserBase::all();
+	// 	return view('joinss', ['flights' => $user]);
+	// }
+
+
+
+	public function resetAccount(Request $request){
+
+		#extract values from form
+
+		$password=$request->input("pwd");
+		$confirmPassword=$request->input("cPwd");
+
+
+		#filter form values
+		$password=$this->filter($password);
+		$confirmPassword=$this->filter($confirmPassword);
+
+
+		#run validators and confirm if all is fine
+		if($this->validators("pwd",$password)==true && strlen($password)>6 && $confirmPassword==$password){#if validators worked fine then do this
+
+
+
+				
+				
+				try {
+					$client = new Client();
+					    $res = $client->request('POST', 'http://127.0.0.1:5000/resetMail', [
+					        'form_params' => [
+					        	'email'=>$request->session()->get('resetEmail'),
+					            'password' => $password,
+					        ]
+					    ]);
+
+					$result= $res->getBody()->getContents();
+					// return $result;
+					 // do($result);
+					if ($result=="true") {
+						# code...
+						$request->session()->remove('resetAccount');
+						return redirect("account/login");
+						
+
+					}
+
+
+					else{
+						print $result;
+						return view("account.reset")->with(array('formErr'=>$request->session()->get('resetEmail')));
+					}
+					// return view("account.login")->with(array('pwdErr'=>"Incorrect username or password",'usrVal'=>$usr));			
+				} catch (Exception $e) {
+
+					print "hy";
+					print $e;
+					// "Sorry an Errors Occured"
+					return view("account.reset")->with(array('formErr'=>$request->session()->get('resetEmail')));
+
+					
+				}
+
+
+
+		}
+
+		else{
+			
+			if($this->validators("pwd",$password)==false){
+
+				return view("account.reset")->with(array('pwdErr'=>"Format accepted are either (numbers/symbols/caps) with lowercase letters"));
+
+			}
+
+			else if($confirmPassword!=$password){
+
+				return view("account.reset")->with(array('cPwdErr'=>"Sorry password does not match"));
+
+			}
+
+		}
+
+
+	}
+
+
+
+	public function confrimEmail(Request $request,$token)
+	{
+		# code...
+				try {
+					$client = new Client();
+					    $res = $client->request('GET', 'http://127.0.0.1:5000/confirm/'.$token);
+
+					$result= $res->getBody()->getContents();
+					 // do($result);
+					if ($result=="expired") {
+
+						$request->session()->put('accountConfirmed', "Link Already Expired");
+						return view("account.confirm",array('msg' =>'The link you followed has expired or is broken.','msgErr'=>''));
+
+					}
+
+					elseif ($result=="already") {
+
+						$request->session()->put('accountConfirmed', true);
+						return view("account.confirm",array('msg' =>'This account has already been confirmed.','msgErr'=>'already'));
+
+					}
+
+
+					else{
+
+
+							$request->session()->put('loggedIn', true);
+							$request->session()->put('loggedUsr', $result);
+							return view("account.confirm",array('msg' =>'Confirmation sucessfull.','msgErr'=>'confirm'));
+
+					}
+				} catch (Exception $e) 
+				{
+
+					$request->session()->put('accountConfirmed', "Your account could not be confirmed");
+						return redirect("/login");
+									
+				}
+
+	}
+ 	
+
+
+	public function verifyForgotToken(Request $request,$token)
+	{
+		# code...
+		#the link user's would click when they request for a forgot password toekn
+				try {
+					$client = new Client();
+					    $res = $client->request('GET', 'http://127.0.0.1:5000/reset/'.$token);
+
+					$result= $res->getBody()->getContents();
+					 // do($result);
+					if ($result=="x") {
+
+						$request->session()->put('accountConfirmed', "Link Already Expired");
+						return view("account.confirm",array('msg' =>'The link you followed has expired or is broken.','msgErr'=>''));
+
+					}
+
+
+					else{
+
+
+							$request->session()->put('resetAccount', true);
+							$request->session()->put('resetEmail', $result);
+
+							return redirect("account/reset");
+							// return view("account.confirm",array('msg' =>'Confirmation sucessfull.','msgErr'=>'confirm'));
+
+					}
+				} catch (Exception $e) 
+				{
+
+					$request->session()->put('accountConfirmed', "Your account could not be confirmed");
+						return redirect("/login");
+									
+				}
+		
+
+
+	}
+
+
+	public function logout(Request $request)
+	{
+		# code...
+		if ($request->session()->has('loggedIn') && $request->session()->has('loggedUsr')) {
+
+           $request->session()->forget('loggedIn');
+           $request->session()->forget('loggedUsr');
+           return redirect("account/login");
+
+        }
+
+        else{
+
+        	return redirect("account/login");
+
+        }
+
+	}
 
 
 	public function personalPage(Request $req)
@@ -79,20 +276,21 @@ class accountHandler extends Controller
 					            'state' => $state,
 					            'postalCode' => $postalCode,
 					            'dob' => $dob,
+					            'usr'=>$request->session()->get('loggedUsr'),
 					        ]
 					    ]);
 
 					$result= $res->getBody()->getContents();
 					 // do($result);
-					if ($result=="true") {
+					if ($result=="True") {
 
-						$request->session()->put('accountConfirmed', true);
-						return "Personal Data was sucessfully inputed into the system";
+						// $request->session()->put('accountConfirmed', true);
+						return redirect("/home");
 
 					}
 					else{
 
-							return view("account.personal")->with(array('frmErr'=>"Sorry an error occured, try submit again",'adVal'=>$address,'psCVal'=>$postalCode,'dobVal'=>$dob,'strVal'=>$state,'ctVal'=>$city,'states'=>$this->states(),'cities'=>$this->cities()));
+							return view("account.personal")->with(array('frmErr'=>$result,'adVal'=>$address,'psCVal'=>$postalCode,'dobVal'=>$dob,'strVal'=>$state,'ctVal'=>$city,'states'=>$this->states(),'cities'=>$this->cities()));
 
 					}
 				} catch (Exception $e) 
@@ -120,13 +318,54 @@ class accountHandler extends Controller
 
 		if($this->validators("email",$email)==true && !empty(DB::select('select * from user WHERE email=?',[$email]))){
 			
+				try {
+						$client = new Client();
+						    $res = $client->request('POST', 'http://127.0.0.1:5000/reset/password', [
+						        'form_params' => ['email' =>$email,
+						        ]
+
+						    ]);
+
+						$result= $res->getBody()->getContents();
+						// return $result;
+						 // do($result);
+						if ($result=="sent") {
+
+
+							// $request->session()->put('loggedIn', true);
+							// $request->session()->put('loggedUsr', $result);
+							return view("account.forgot")->with(array('formMsg'=>"Reset Password sent",'emVal'=>$email));
+
+						}
+
+						elseif ($result=="ntConfirmed") {
+
+							// $request->session()->put('accountConfirmed', true);
+							return view("account.forgot")->with(array('emErr'=>"This Email hasnt been confirmed yet",'emVal'=>$email));
+
+						}
+
+
+						else{
+
+							return view("account.forgot")->with(array('emErr'=>"Sorry an error occured",'emVal'=>$email));
+							}
+
+				}
+				catch (Exception $e) 
+				{
+
+					return view("account.forgot")->with(array('emErr'=>"Sorry an error occured",'emVal'=>$email));
+									
+				}
+
 			#execute query to python so as to revalidate the email n send mail for password recovery
 
 		}
 
 		else{
 
-			return view("account.forgot")->with(array('emErr'=>"Email Address does not exist",'emVal'=>$emai));
+			return view("account.forgot")->with(array('emErr'=>"Email Address does not exist",'emVal'=>$email));
 
 		}
 
@@ -140,10 +379,10 @@ class accountHandler extends Controller
 
  		$usr=$this->filter($request->input("userNm"));
  		$email=$this->filter($request->input("email"));
+ 		$cEmail=$this->filter($request->input("cEml"));
  		$fulName=$this->filter($request->input("fulname"));
  		$phnNum=$this->filter($request->input("phn"));
  		$password=$this->filter($request->input("pwd"));
- 		$cPasswrd=$this->filter($request->input("cPhn"));
  		$csrf_for_Flask=$request->input("csrf_token");# get csrf_token from page for flask server
 
 
@@ -154,7 +393,7 @@ class accountHandler extends Controller
  		#run validations for the form data
 
 
- 		if ($this->validators("user",$usr)==true && $this->validators("email",$email)==true && $this->validators("name",$fulName)==true && $this->validators("number",$phnNum)==true && $this->validators("pwd",$password)==true && $cPasswrd==$password && empty($checkUsername) && empty($checkMail) && empty($checkNumber)) 
+ 		if ($this->validators("user",$usr)==true && $this->validators("email",$email)==true && $this->validators("name",$fulName)==true && $this->validators("number",$phnNum)==true && $this->validators("pwd",$password)==true && $cEmail==$email && empty($checkUsername) && empty($checkMail) && empty($checkNumber)) 
  		{
  			#this code gets executed when all coast is clear, n all validations re made with no form errors...
  			#now submit this to python server
@@ -177,17 +416,18 @@ class accountHandler extends Controller
 					if ($result=="true") {
 
 						$request->session()->put('accountConfirmed', true);
+						return redirect("account/confirm");
 
 					}
 					else{
 
-							return view("account.signup")->with(array('frmErr'=>"Sorry an error occured, try submit again",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+							return view("account.signup")->with(array('frmErr'=>"Sorry an error occured, try submit again",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
 
 					}
 				} catch (Exception $e) 
 				{
 
-					return view("account.signup")->with(array('frmErr'=>"Sorry an error occured, try submit again",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+					return view("account.signup")->with(array('frmErr'=>"Sorry an error occured, try submit again",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
 									
 				}
 
@@ -198,57 +438,59 @@ class accountHandler extends Controller
 
  		elseif($this->validators("name",$fulName)!=true) {
 
- 			return view("account.signup")->with(array('nmErr'=>"Name Example: John Doe",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+ 			return view("account.signup")->with(array('nmErr'=>"Name Example: John Doe",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
 
  		}
 
  		elseif($this->validators("user",$usr)!=true) {
 
- 			return view("account.signup")->with(array('usrErr'=>"You would use this to login",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+ 			return view("account.signup")->with(array('usrErr'=>"You would use this to login",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
 
  		}
 
  		elseif($this->validators("email",$email)!=true) {
 
- 			return view("account.signup")->with(array('emErr'=>"Invalid Email Address",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+ 			return view("account.signup")->with(array('emErr'=>"Invalid Email Address",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
+
+ 		}
+
+ 		elseif($cEmail!=$email) {
+
+ 			return view("account.signup")->with(array('cEmErr'=>"Email does not match",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
 
  		}
 
 
  		elseif($this->validators("number",$phnNum)!=true) {
 
- 			return view("account.signup")->with(array('numErr'=>"Invalid Number format",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+ 			return view("account.signup")->with(array('numErr'=>"Invalid Number format",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
 
  		}
 
  		elseif($this->validators("pwd",$password)!=true) {
 
- 			return view("account.signup")->with(array('psErr'=>"Format accepted are either (numbers/symbols/caps) with lowercase letters",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+ 			return view("account.signup")->with(array('psErr'=>"Format accepted are either (numbers/symbols/caps) with lowercase letters",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
 
  		}
 
 
- 		elseif($cPasswrd!=$password) {
 
- 			return view("account.signup")->with(array('cPErr'=>"Password does not match",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
-
- 		}
 
  		elseif(!empty($checkUsername)) {
 
- 			return view("account.signup")->with(array('usrErr'=>"Username is already in use",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+ 			return view("account.signup")->with(array('usrErr'=>"Username is already in use",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
 
  		}
 
  		elseif(!empty($checkMail)) {
 
- 			return view("account.signup")->with(array('emErr'=>"Email is already in use",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+ 			return view("account.signup")->with(array('emErr'=>"Email is already in use",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
 
  		}
 
  		elseif (!empty($checkNumber)) {
 
- 			return view("account.signup")->with(array('numErr'=>"Phone number is already in use",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'numVal'=>$phnNum));
+ 			return view("account.signup")->with(array('numErr'=>"Phone number is already in use",'nmVal'=>$fulName,'usrVal'=>$usr,'emVal'=>$email,'cEmVal'=>$cEmail,'numVal'=>$phnNum));
 
  		}
 
@@ -347,6 +589,7 @@ class accountHandler extends Controller
 		$usr=$request->input("userNm");
 		$password=$request->input("passKey");
 		$csrf_for_Flask=$request->input("csrf_token");# get csrf_token from page for flask server
+		$remember=$request->input("chckBox");
 
 
 		#filter form values
@@ -367,24 +610,35 @@ class accountHandler extends Controller
 					        'form_params' => [
 					            'usr' => $usr,
 					            'pwd' => $password,
+					            'remember'=>$remember,
 					            'csrf_token'=>$csrf_for_Flask,
 					        ]
 					    ]);
 
 					$result= $res->getBody()->getContents();
+					// return $result;
 					 // do($result);
 					if ($result=="true") {
 						# code...
 						$request->session()->put('loggedIn', true);
 						$request->session()->put('loggedUsr', $usr);
-						print "logged in sucessfully<br/>";
-						print $request->session()->get('loggedUsr');
+						// print "logged in sucessfully<br/>";
+						// print $request->session()->get('loggedUsr');
+						return redirect("home");
 					}
 
 					elseif ($result=="unconfirmed") {
-						#if email is not yet confirmed
-						
+						#if email is not yet confirmed						
 						return view("account.login")->with(array('usrErr'=>"Confirm your mail to login",'usrVal'=>$usr));
+
+					}
+
+					elseif ($result=="accountUnconfirmed") {
+						#if email is not yet confirmed
+						$request->session()->put('loggedIn', true);
+						$request->session()->put('loggedUsr', $usr);
+						return redirect('account/personal');
+
 
 					}
 
@@ -394,7 +648,10 @@ class accountHandler extends Controller
 					// return view("account.login")->with(array('pwdErr'=>"Incorrect username or password",'usrVal'=>$usr));			
 				} catch (Exception $e) {
 
+					print "hy";
 					print $e;
+					return "Sorry An Error Occured";
+
 					
 				}
 
@@ -510,13 +767,30 @@ class accountHandler extends Controller
 			# code...
 			if(preg_match("~^\d{2}-\d{2}-\d{4}$~", $value)){
 
-				return true;
+				if (split(" ", $value)[2]<=date("Y")) {
+					# code...
+					return true;
+					
+				}
+
+				else{
+					return false;
+				}
 
 			}
 
 			elseif(preg_match("~^\d{2} \d{2} \d{4}$~", $value)){
 
-				return true;
+				
+
+				if (split(" ", $value)[2]<=date("Y")) {
+					# code...
+					return true;
+				}
+
+				else{
+					return false;
+				}
 
 			}
 
