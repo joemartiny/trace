@@ -24,6 +24,56 @@ class accountHandler extends Controller
 	// }
 
 
+	public function resendMail(Request $request)
+	{
+		# code...
+		// $request->session()->get('email');
+			try {
+
+					$email=$this->filter($request->input("email"));
+					if($this->validators("email",$email)==true){
+
+						$client = new Client();
+						$res = $client->request('POST', 'http://127.0.0.1:5000/resendMail', ['form_params' => [
+						        	'email'=>$email
+						        ]
+						    ]);
+
+						$result= $res->getBody()->getContents();
+						if ($result=="true") {
+							# code...
+							return redirect('account/confirm')->with('email',$email);
+
+						}
+
+						elseif($result=="notFound"){
+
+							return "Opps Email Not found Or has already been confirmed";
+
+						}
+
+						else{
+
+							return "An Error Occured";
+
+						}
+
+					}
+					else{
+						return "Sorry an error occured";
+					}
+
+
+			}
+
+			catch(Exception $e){
+				echo $e;
+				return "Opps an error occured";
+			}
+
+
+	}
+
 
 	public function resetAccount(Request $request){
 
@@ -416,7 +466,9 @@ class accountHandler extends Controller
 					if ($result=="true") {
 
 						$request->session()->put('accountConfirmed', true);
-						return redirect("account/confirm");
+						$request->session()->put('email',$email);
+						// return redirect("account/confirm");
+						return redirect('account/confirm')->with('email',$email);
 
 					}
 					else{
@@ -598,7 +650,7 @@ class accountHandler extends Controller
 
 
 		#run validators and confirm if all is fine
-		if($this->validators("user",$usr)==true && $this->validators("pwd",$password)==true && strlen($password)>6){#if validators worked fine then do this
+		if($this->validators("user",$usr)==true || $this->validators("email",$usr)==true && $this->validators("pwd",$password)==true && strlen($password)>6){#if validators worked fine then do this
 
 
 
@@ -628,8 +680,9 @@ class accountHandler extends Controller
 					}
 
 					elseif ($result=="unconfirmed") {
-						#if email is not yet confirmed						
-						return view("account.login")->with(array('usrErr'=>"Confirm your mail to login",'usrVal'=>$usr));
+
+						#if email is not yet confirmed
+						return view("account.login")->with(array('usrErr'=>"Confirm your mail to login,",'usrVal'=>$usr));
 
 					}
 
@@ -767,7 +820,7 @@ class accountHandler extends Controller
 			# code...
 			if(preg_match("~^\d{2}-\d{2}-\d{4}$~", $value)){
 
-				if (split(" ", $value)[2]<=date("Y")) {
+				if (explode(" ", $value)[2]<date("Y")) {
 					# code...
 					return true;
 					
@@ -783,7 +836,7 @@ class accountHandler extends Controller
 
 				
 
-				if (split(" ", $value)[2]<=date("Y")) {
+				if (explode(" ", $value)[2]<date("Y")) {
 					# code...
 					return true;
 				}
@@ -922,6 +975,7 @@ public function cities()
 		# code...
 
 	return array(
+	'Others',
 	'Aba',
 	'Abakaliki',
 	'Abeokuta',
